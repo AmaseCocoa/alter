@@ -15,7 +15,7 @@ paru -S alter
 ## Usage
 Adding or removing accounts is not currently supported. You can add or remove accounts by manually modifying the configuration file.
 ```toml
-inUse = null # USED FOR STATE MANAGEMENT, DO NOT EDIT IT!
+inUse = "" # USED FOR STATE MANAGEMENT, DO NOT EDIT IT!
 
 [[accounts]]
 type = "linked" # Field type, you want use alias, set type to "linked"
@@ -33,7 +33,7 @@ host = "https://git.example.com"
 username = "user" # username for commit, etc
 email = "user@example.com" # email address for commit, etc
 withCred = false
-signingkey = null # Key used for signing. If not use key, set to null. (key is unset automaticlly when switch to this profile.)
+signingkey = "" # Key used for signing. If not use key, set to empty. (key is unset automaticlly when switch to this profile.)
 
 [[aliases]]
 id = "hoge"
