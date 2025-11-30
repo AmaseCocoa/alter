@@ -6,6 +6,12 @@ An "Alternative" account switcher. written in Rust
 cargo install alter
 ```
 
+If using Arch Linux, can install from AUR:
+
+```
+paru -S alter
+```
+
 ## Usage
 Adding or removing accounts is not currently supported. You can add or remove accounts by manually modifying the configuration file.
 ```toml
