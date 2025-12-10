@@ -3,7 +3,7 @@ name = "alter"
 version = "0.2.1"
 edition = "2024"
 authors = ["AmaseCocoa <cocoa@amase.cc>"]
-description = 'Switch git username and email and credential in one-line.'
+description = 'One-liner to switch Git identity and credentials.'
 license = "MIT"
 repository = "https://github.com/AmaseCocoa/alter"
 
