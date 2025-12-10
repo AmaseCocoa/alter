@@ -33,8 +33,8 @@ enum Commands {
         #[arg(help = "The slug (filename) of the profile you want to use. If left blank, it resets the current profile.")]
         slug: Option<String>,
         #[clap(long, short, action)]
-        #[arg(help = "If set, this change will apply globally.")]
-        global: bool,
+        #[arg(help = "If set, this change will apply to the local repository.")]
+        local: bool,
     },
     #[command(
         about = "Create profile.", 
@@ -56,14 +56,14 @@ fn main() {
         Commands::List {} => {
             cmds::list::list_profiles()
         }
-        Commands::Use { slug, global } => {
-            cmds::use_profile::use_profile(slug, global);
+        Commands::Use { slug, local } => {
+            cmds::use_profile::use_profile(slug, local);
         },
         Commands::New {} => {
             cmds::new::new_profile();
         },
         Commands::Delete { slug } => {
-            cmds::del::delete_profile(slug);
+            cmds::delete::delete_profile(slug);
         }
     }
 }

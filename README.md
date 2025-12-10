@@ -8,7 +8,7 @@ cargo install alter
 
 If using Arch Linux, can install from AUR:
 
-```
+```bash
 paru -S alter
 ```
 
@@ -25,7 +25,7 @@ alter delete [slug]
 
 Switch profile:
 ```bash
-alter use [slug] <--global>
+alter use [slug] <--local>
 ```
 
 List avaliable profiles:
