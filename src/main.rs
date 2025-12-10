@@ -1,87 +1,69 @@
 mod config;
-mod git_ops;
-mod ui;
+mod cmds;
+mod git;
 
-use config::Config;
+use clap::{Parser, Subcommand};
 
-fn main() -> std::io::Result<()> {
-    let mut cfg: Config = match config::load_config() {
-        Ok(c) => c,
-        Err(e) => {
-            panic!("Failed to load config!\n{}", e.to_string());
-        }
-    };
+#[derive(Parser, Debug)]
+#[command(
+    name = env!("CARGO_PKG_NAME"),
+    version = env!("CARGO_PKG_VERSION"),
+    author = env!("CARGO_PKG_AUTHORS"),
+    about = env!("CARGO_PKG_DESCRIPTION"),
+    arg_required_else_help = true,
+)]
+struct Cli {
+    #[arg(short, long, global = true, help = "Enable verbose output for detailed execution information.")]
+    verbose: bool,
 
-    let selection = ui::get_account_selection(&cfg)?;
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    match selection {
-        Some(index) => {
-            let selected_account = &cfg.accounts[index];
-
-            let (id, _, username, email, with_cred, signing_key) = match selected_account {
-                config::Account::AccountDetails {
-                    id,
-                    host,
-                    email,
-                    username,
-                    with_cred,
-                    signing_key: details_signing_key,
-                    ..
-                } => (
-                    id,
-                    host.clone(),
-                    username.clone(),
-                    email.clone(),
-                    with_cred,
-                    details_signing_key.clone(),
-                ),
-                config::Account::LinkedAccount {
-                    id,
-                    host,
-                    link_to,
-                    with_cred,
-                    ..
-                } => {
-                    let alias_option = cfg.get_alias_by_id(link_to);
-                    let (username, email) = alias_option.as_ref().map_or_else(
-                        || (String::from("UNKNOWN ALIAS"), String::from("UNKNOWN ALIAS")),
-                        |alias| (alias.username.clone(), alias.email.clone()),
-                    );
-
-                    let signing_key_val = alias_option.map_or_else(
-                        || String::from("UNKNOWN ALIAS"),
-                        |alias| {
-                            alias
-                                .signing_key
-                                .clone()
-                                .unwrap_or(String::from("UNKNOWN ALIAS"))
-                        },
-                    );
-
-                    let signing_key_option: Option<String> = if signing_key_val == "UNKNOWN ALIAS" {
-                        None
-                    } else {
-                        Some(signing_key_val)
-                    };
-
-                    (
-                        id,
-                        host.clone(),
-                        username,
-                        email,
-                        with_cred,
-                        signing_key_option,
-                    )
-                }
-            };
-            let id_deref = *id;
-            cfg.in_use = Some(id_deref);
-            let _ = cfg.save();
-
-            git_ops::update_git_config(&id_deref, &username, &email, *with_cred, &signing_key)?;
-        }
-        None => {}
+#[derive(Subcommand, Debug)]
+enum Commands {
+    #[command(
+        about = "Show all avaliable profile and current profile.", 
+    )]
+    List {},
+    #[command(
+        about = "Change the current profile to the selected one.", 
+    )]
+    Use {
+        #[arg(help = "The slug (filename) of the profile you want to use. If left blank, it resets the current profile.")]
+        slug: Option<String>,
+        #[clap(long, short, action)]
+        #[arg(help = "If set, this change will apply globally.")]
+        global: bool,
+    },
+    #[command(
+        about = "Create profile.", 
+    )]
+    New {},
+    #[command(
+        about = "Delete profile.", 
+    )]
+    Delete {
+        #[arg(help = "The slug (filename) of the profile you want to delete.")]
+        slug: String,
     }
+}
 
-    Ok(())
+fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::List {} => {
+            cmds::list::list_profiles()
+        }
+        Commands::Use { slug, global } => {
+            cmds::use_profile::use_profile(slug, global);
+        },
+        Commands::New {} => {
+            cmds::new::new_profile();
+        },
+        Commands::Delete { slug } => {
+            cmds::del::delete_profile(slug);
+        }
+    }
 }
