@@ -1,41 +1,18 @@
-use std::io::{BufReader, Read, Write};
-use std::path::PathBuf;
-use std::{fs::File, io};
+use std::io::{ErrorKind, Read};
+use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use dirs;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum Account {
-    #[serde(rename = "details")]
-    AccountDetails {
-        id: Uuid,
-        slug: String,
-        host: String,
-        username: String,
-        email: String,
-        #[serde(rename = "withCred")]
-        with_cred: bool,
-        #[serde(rename = "signingkey")]
-        signing_key: Option<String>,
-    },
-    #[serde(rename = "linked")]
-    LinkedAccount {
-        id: Uuid,
-        slug: String,
-        host: String,
-        #[serde(rename = "linkTo")]
-        link_to: Uuid,
-        #[serde(rename = "withCred")]
-        with_cred: bool,
-    },
+pub struct AlterProfile {
+    pub id: Uuid,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Alias {
-    pub id: Uuid,
+pub struct AlterUser {
     pub username: String,
     pub email: String,
     #[serde(rename = "signingkey")]
@@ -43,35 +20,21 @@ pub struct Alias {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub accounts: Vec<Account>,
-    pub aliases: Vec<Alias>,
-    #[serde(rename = "inUse")]
-    pub in_use: Option<Uuid>,
+pub struct AlterProfileConfig {
+    pub profile: AlterProfile,
+    pub user: AlterUser,
 }
 
-impl Config {
-    pub fn get_alias_by_id(&self, id: &Uuid) -> Option<&Alias> {
-        self.aliases.iter().find(|alias| &alias.id == id)
-    }
-
-    pub fn is_in_use_uuid_valid(&self) -> bool {
-        self.in_use.is_some()
-    }
-    
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let path = get_config_path()?;
-        let mut file = File::create(path)?;
-    
-        let toml_string = toml::to_string(&self)?; 
-        
-        file.write_all(toml_string.as_bytes())?;
-        
-        Ok(())
-    }
+#[derive(Debug)]
+pub struct ProfileInfo {
+    pub id: Uuid,
+    pub slug: String,
+    pub username: String,
+    pub email: String,
+    pub signing_key: Option<String>,
 }
 
-fn get_config_path() -> Result<PathBuf, io::Error> {
+pub fn get_config_dir() -> Result<PathBuf, io::Error> {
     let mut path: PathBuf = match dirs::home_dir() {
         Some(p) => p,
         None => {
@@ -81,49 +44,96 @@ fn get_config_path() -> Result<PathBuf, io::Error> {
             ));
         }
     };
-    path.push(".altercfg");
+    path.push(".git-profiles");
     Ok(path)
 }
 
-pub fn load_config() -> Result<Config, io::Error> {
-    let path = get_config_path()?;
+pub fn get_profile_from_slug(slug: String) -> Result<ProfileInfo, io::Error> {
+    let mut config_path = get_config_dir()?;
+    config_path.push(format!("{}.toml", slug));
 
-    match File::open(&path) {
-        Ok(file) => {
-            let mut reader = BufReader::new(file);
-            let mut str = String::new();
-            reader.read_to_string(&mut str).expect("cannot read string");
-            match toml::from_str(&str) {
-                Ok(config) => Ok(config),
-                Err(e) => Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Failed to parse config file: {}", e),
-                )),
+    if config_path.exists() {
+        match read_profile_config(&config_path) {
+            Ok(config) => Ok(ProfileInfo {
+                slug,
+                id: config.profile.id,
+                username: config.user.username,
+                email: config.user.email,
+                signing_key: config.user.signing_key
+            }),
+            Err(e) => {
+                Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Failed to load profile: {}", e),
+                ))
             }
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            let default_config = Config {
-                accounts: vec![],
-                aliases: vec![],
-                in_use: None,
-            };
+    } else {
+        Err(io::Error::new(
+            ErrorKind::InvalidData,
+            "Profile not found",
+        ))
+    }
+}
 
-            let toml_data = match toml::to_string_pretty(&default_config) {
-                Ok(data) => data,
-                Err(e) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("Failed to serialize default config: {}", e),
-                    ));
+pub fn list_profiles() -> Result<Vec<ProfileInfo>, io::Error> {
+    let config_dir = get_config_dir()?;
+    let mut profiles = Vec::new();
+
+    if !config_dir.exists() {
+        return Ok(profiles);
+    }
+
+    for entry in fs::read_dir(config_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            let slug = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            if slug.is_empty() {
+                continue;
+            }
+
+            match read_profile_config(&path) {
+                Ok(config) => {
+                    profiles.push(ProfileInfo {
+                        slug,
+                        id: config.profile.id,
+                        username: config.user.username,
+                        email: config.user.email,
+                        signing_key: config.user.signing_key
+                    });
                 }
-            };
-
-            let mut file = File::create(&path)?;
-
-            file.write_all(toml_data.as_bytes())?;
-
-            Ok(default_config)
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Could not read profile file {}: {}",
+                        path.display(),
+                        e
+                    );
+                    continue;
+                }
+            }
         }
-        Err(e) => Err(e),
+    }
+
+    Ok(profiles)
+}
+
+fn read_profile_config(path: &Path) -> Result<AlterProfileConfig, io::Error> {
+    let mut file = fs::File::open(path)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    match toml::from_str(&content) {
+        Ok(config) => Ok(config),
+        Err(e) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed to parse user profile: {}", e),
+        )),
     }
 }
