@@ -20,7 +20,7 @@ alter new
 
 Delete profile:
 ```bash
-alter del [slug]
+alter delete [slug]
 ```
 
 Switch profile:
