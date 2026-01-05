@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 use gix_config::{File, Source};
 use std::fs::write;
 
@@ -23,6 +23,10 @@ impl GitConfig {
                 std::env::var("USERPROFILE").unwrap_or_default()
             });
             let path = PathBuf::from(home_dir).join(".gitconfig");
+            if !path.exists() {
+                fs::File::create(&path)?;
+            }
+            
             let file = File::from_path_no_includes(path.clone(), Source::User)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             Ok(Self { file, path })

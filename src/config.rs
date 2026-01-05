@@ -44,7 +44,12 @@ pub fn get_config_dir() -> Result<PathBuf, io::Error> {
             ));
         }
     };
+    
     path.push(".git-profiles");
+    if !path.exists() {
+        fs::create_dir(&path)?;
+    }
+    
     Ok(path)
 }
 
