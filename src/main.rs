@@ -1,6 +1,7 @@
 mod config;
 mod cmds;
 mod git;
+mod oauth;
 
 use clap::{Parser, Subcommand};
 
@@ -40,30 +41,52 @@ enum Commands {
         about = "Create profile.", 
     )]
     New {},
-    #[command(
-        about = "Delete profile.", 
-    )]
-    Delete {
-        #[arg(help = "The slug (filename) of the profile you want to delete.")]
-        slug: String,
-    }
-}
-
-fn main() {
-    let cli = Cli::parse();
-
-    match cli.command {
-        Commands::List {} => {
-            cmds::list::list_profiles()
-        }
-        Commands::Use { slug, local } => {
-            cmds::use_profile::use_profile(slug, local);
+        #[command(
+            about = "Delete profile.", 
+        )]
+        Delete {
+            #[arg(help = "The slug (filename) of the profile you want to delete.")]
+            slug: String,
         },
-        Commands::New {} => {
-            cmds::new::new_profile();
+        #[command(
+            about = "Manage credentials for profiles.", 
+        )]
+        Credm {
+            #[command(subcommand)]
+            command: CredmCommands,
         },
-        Commands::Delete { slug } => {
-            cmds::delete::delete_profile(slug);
+    }
+    
+    #[derive(Subcommand, Debug)]
+    pub enum CredmCommands {
+        Get {},
+        Store {},
+        Erase {},
+    }
+    
+    fn main() {
+        let cli = Cli::parse();
+    
+        match cli.command {
+            Commands::List {} => {
+                cmds::list::list_profiles()
+            }
+            Commands::Use { slug, local } => {
+                cmds::use_profile::use_profile(slug, local);
+            },
+            Commands::New {} => {
+                cmds::new::new_profile();
+            },
+            Commands::Delete { slug } => {
+                cmds::delete::delete_profile(slug);
+            }
+            Commands::Credm { command } => {
+                match command {
+                    CredmCommands::Get {} => {},
+                    CredmCommands::Store {} => {},
+                    CredmCommands::Erase {} => {},
+                }
+            }
         }
     }
-}
+    

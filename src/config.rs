@@ -23,6 +23,7 @@ pub struct AlterUser {
 pub struct AlterProfileConfig {
     pub profile: AlterProfile,
     pub user: AlterUser,
+    pub credentials: Option<String>,
 }
 
 #[derive(Debug)]
@@ -51,34 +52,6 @@ pub fn get_config_dir() -> Result<PathBuf, io::Error> {
     }
     
     Ok(path)
-}
-
-pub fn get_profile_from_slug(slug: String) -> Result<ProfileInfo, io::Error> {
-    let mut config_path = get_config_dir()?;
-    config_path.push(format!("{}.toml", slug));
-
-    if config_path.exists() {
-        match read_profile_config(&config_path) {
-            Ok(config) => Ok(ProfileInfo {
-                slug,
-                id: config.profile.id,
-                username: config.user.username,
-                email: config.user.email,
-                signing_key: config.user.signing_key
-            }),
-            Err(e) => {
-                Err(io::Error::new(
-                    ErrorKind::InvalidData,
-                    format!("Failed to load profile: {}", e),
-                ))
-            }
-        }
-    } else {
-        Err(io::Error::new(
-            ErrorKind::InvalidData,
-            "Profile not found",
-        ))
-    }
 }
 
 pub fn list_profiles() -> Result<Vec<ProfileInfo>, io::Error> {
@@ -127,6 +100,102 @@ pub fn list_profiles() -> Result<Vec<ProfileInfo>, io::Error> {
     }
 
     Ok(profiles)
+}
+
+pub fn get_profile_from_slug(slug: String) -> Result<ProfileInfo, io::Error> {
+    let mut config_path = get_config_dir()?;
+    config_path.push(format!("{}.toml", slug));
+
+    if config_path.exists() {
+        match read_profile_config(&config_path) {
+            Ok(config) => Ok(ProfileInfo {
+                slug,
+                id: config.profile.id,
+                username: config.user.username,
+                email: config.user.email,
+                signing_key: config.user.signing_key
+            }),
+            Err(e) => {
+                Err(io::Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Failed to load profile: {}", e),
+                ))
+            }
+        }
+    } else {
+        Err(io::Error::new(
+            ErrorKind::InvalidData,
+            "Profile not found",
+        ))
+    }
+}
+
+use crate::git;
+
+pub fn get_current_profile() -> Result<Option<ProfileInfo>, Box<dyn std::error::Error>> {
+    let local_config = git::GitConfig::load(true);
+    let mut current_id = None;
+
+    if let Ok(config) = local_config {
+        if let Ok(section) = config.file.section("credential", None) {
+            if let Some(namespace) = section.value("namespace") {
+                current_id = Some(namespace.to_string());
+            }
+        }
+    }
+
+    if current_id.is_none() {
+        if let Ok(config) = git::GitConfig::load(false) {
+            if let Ok(section) = config.file.section("credential", None) {
+                if let Some(namespace) = section.value("namespace") {
+                    current_id = Some(namespace.to_string());
+                }
+            }
+        }
+    }
+
+    if let Some(id_str) = current_id {
+        if id_str.is_empty() {
+            return Ok(None);
+        }
+        
+        let profiles = list_profiles()?;
+        for profile in profiles {
+            if profile.id.to_string() == id_str {
+                return Ok(Some(profile));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+pub fn update_profile_credentials(slug: String, credentials: String) -> Result<(), io::Error> {
+    let mut config_path = get_config_dir()?;
+    config_path.push(format!("{}.toml", slug));
+
+    if config_path.exists() {
+        let mut config = read_profile_config(&config_path)?;
+        config.credentials = Some(credentials);
+
+        let toml_string = match toml::to_string(&config) {
+            Ok(s) => s,
+            Err(e) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Failed to serialize profile: {}", e),
+                ));
+            }
+        };
+
+        fs::write(config_path, toml_string)?;
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Profile not found",
+        ))
+    }
 }
 
 fn read_profile_config(path: &Path) -> Result<AlterProfileConfig, io::Error> {
