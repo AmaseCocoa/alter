@@ -74,6 +74,8 @@ pub struct OAuthProvider {
     pub auth_endpoint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scopes: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -147,6 +149,11 @@ fn builtin_providers() -> HashMap<String, OAuthProvider> {
             ),
             auth_endpoint: None,
             token_endpoint: None,
+            scopes: vec![
+                "repo".to_string(),
+                "gist".to_string(),
+                "workflow".to_string(),
+            ],
         },
     );
 
@@ -160,6 +167,11 @@ fn builtin_providers() -> HashMap<String, OAuthProvider> {
             client_secret: Some("eccb1988f224f0ef54bd78f6b4691f9e854f3449".to_string()),
             auth_endpoint: None,
             token_endpoint: None,
+            scopes: vec![
+                "repo".to_string(),
+                "gist".to_string(),
+                "workflow".to_string(),
+            ],
         },
     );
 
@@ -177,6 +189,10 @@ fn builtin_providers() -> HashMap<String, OAuthProvider> {
             ),
             auth_endpoint: None,
             token_endpoint: None,
+            scopes: vec![
+                "write_repository".to_string(),
+                "read_repository".to_string(),
+            ],
         },
     );
 
@@ -218,7 +234,9 @@ pub fn load_config() -> Result<AlterConfig, Box<dyn std::error::Error>> {
         };
 
         let mut merged = generate_default_config();
-        merged.oauth_providers.extend(user_config.oauth_providers);
+        for (key, provider) in user_config.oauth_providers {
+            merged.oauth_providers.insert(key, provider);
+        }
         Ok(merged)
     } else {
         let default_config = generate_default_config();
@@ -312,6 +330,33 @@ pub fn get_auth_token_endpoints(provider: &OAuthProvider) -> (String, String) {
     let token_endpoint = token_template.replace("{host}", &provider.host);
 
     (auth_endpoint, token_endpoint)
+}
+
+pub fn get_scopes(provider: &OAuthProvider) -> Vec<String> {
+    if provider.provider_type == ProviderType::Generic {
+        if !provider.scopes.is_empty() {
+            return provider.scopes.clone();
+        }
+        return vec![];
+    }
+
+    if !provider.scopes.is_empty() {
+        return provider.scopes.clone();
+    }
+
+    match provider.provider_type {
+        ProviderType::GitHub => vec![
+            "repo".to_string(),
+            "gist".to_string(),
+            "workflow".to_string(),
+        ],
+        ProviderType::GitLab => vec![
+            "write_repository".to_string(),
+            "read_repository".to_string(),
+        ],
+        ProviderType::Gitea => vec!["repo".to_string(), "user".to_string()],
+        ProviderType::Generic => vec![],
+    }
 }
 
 pub fn list_profiles() -> Result<Vec<ProfileInfo>, io::Error> {

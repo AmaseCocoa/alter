@@ -5,7 +5,6 @@ use crate::keyring;
 use crate::oauth::{pkce::PKCESecret, session::OAuth2Session};
 
 pub fn setup_credentials(profile: String, host: Option<String>) {
-    // Get profile info
     let profile_info = match config::get_profile_from_slug(profile.clone()) {
         Ok(p) => p,
         Err(e) => {
@@ -14,7 +13,6 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
         }
     };
 
-    // Determine host
     let target_host = if let Some(h) = host {
         h
     } else {
@@ -35,7 +33,6 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
         return;
     }
 
-    // Get OAuth provider for host from config
     let oauth_provider = match config::get_provider_for_host(&target_host) {
         Ok(Some(p)) => p,
         Ok(None) => {
@@ -49,15 +46,15 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
         }
     };
 
-    // Start OAuth2 flow
     println!("Starting OAuth2 authentication for {}...", target_host);
 
-    // Get the appropriate OAuth endpoints for this provider
     let (auth_endpoint, token_endpoint) = config::get_auth_token_endpoints(&oauth_provider);
+    let scopes = config::get_scopes(&oauth_provider);
+    let client_secret = oauth_provider.client_secret.clone().unwrap_or_default();
 
     let mut session = OAuth2Session::with_endpoints(
         oauth_provider.client_id.clone(),
-        oauth_provider.client_secret.unwrap_or_default(),
+        client_secret,
         format!("https://{}", oauth_provider.host),
         if auth_endpoint.is_empty() {
             None
@@ -77,16 +74,14 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
     println!("Opening browser for authentication...");
     println!(
         "If browser doesn't open, visit: {}",
-        session.auth_url(&server, &pkce)
+        session.auth_url(&server, &pkce, &scopes)
     );
 
-    // Try to open browser
-    let _ = open::that(session.auth_url(&server, &pkce));
+    let _ = open::that(session.auth_url(&server, &pkce, &scopes));
 
     if let Some(code) = session.wait_code() {
         match session.get_token(code, &server, &pkce) {
             Ok(token_response) => {
-                // Store token in keyring
                 let profile_id = profile_info.id.to_string();
                 match keyring::set_credential(
                     &profile_id,
@@ -100,7 +95,6 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
                             profile_id, target_host
                         );
 
-                        // Verify token was actually stored
                         match keyring::get_credential(&profile_id, &target_host) {
                             Ok(_) => {
                                 eprintln!(
@@ -122,7 +116,6 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
                     }
                 }
 
-                // Update profile metadata
                 match config::add_host_to_credentials(profile, target_host.clone()) {
                     Ok(_) => {
                         println!("✓ Profile updated with host: {}", target_host);

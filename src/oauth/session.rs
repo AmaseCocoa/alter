@@ -17,6 +17,7 @@ struct OAuth2TokenRequest {
     code: String,
     code_verifier: String,
     redirect_uri: String,
+    grant_type: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -51,7 +52,6 @@ impl OAuth2Session {
         }
     }
 
-    /// Create a new session with custom OAuth endpoints
     pub fn with_endpoints(
         client_id: String,
         client_secret: String,
@@ -99,22 +99,30 @@ impl OAuth2Session {
                 return code;
             }
         }
+
         None
     }
 
-    pub fn auth_url(&self, server: &OAuth2TemporaryServer, pkce: &PKCESecret) -> String {
-        // Use custom auth endpoint if provided, otherwise default to GitHub style
+    pub fn auth_url(
+        &self,
+        server: &OAuth2TemporaryServer,
+        pkce: &PKCESecret,
+        scopes: &[String],
+    ) -> String {
         let auth_endpoint = if let Some(ref endpoint) = self.auth_endpoint {
             endpoint.clone()
         } else {
             format!("{}/login/oauth/authorize", self.host)
         };
 
+        let scope_value = scopes.join(" ");
+
         format!(
-            "{}?client_id={}&redirect_uri={}&scope=repo&code_challenge={}&code_challenge_method=S256",
+            "{}?response_type=code&client_id={}&redirect_uri={}&scope={}&code_challenge={}&code_challenge_method=S256",
             auth_endpoint,
             self.client_id,
             urlencoding::encode(&server.redirect_uri),
+            urlencoding::encode(&scope_value),
             pkce.code_challenge
         )
     }
@@ -132,11 +140,11 @@ impl OAuth2Session {
             code,
             code_verifier: pkce.code_verifier.clone(),
             redirect_uri: server.redirect_uri.clone(),
+            grant_type: "authorization_code".to_string(),
         };
         let mut header = HeaderMap::new();
         header.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
-        // Use custom token endpoint if provided, otherwise default to GitHub style
         let token_endpoint = if let Some(ref endpoint) = self.token_endpoint {
             endpoint.clone()
         } else {
@@ -146,7 +154,7 @@ impl OAuth2Session {
         let res = client
             .post(token_endpoint)
             .headers(header)
-            .json(&body)
+            .form(&body)
             .send();
 
         let response = res?.error_for_status()?;

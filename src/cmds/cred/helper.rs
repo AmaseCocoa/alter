@@ -60,6 +60,9 @@ fn setup_credential_via_oauth(
         }
     };
 
+    let client_secret = oauth_provider.client_secret.clone().unwrap_or_default();
+    let scopes = config::get_scopes(&oauth_provider);
+
     eprintln!(
         "alter cred helper: Opening browser for {} authentication...",
         host
@@ -72,7 +75,7 @@ fn setup_credential_via_oauth(
         // Custom OAuth endpoints
         OAuth2Session::with_endpoints(
             oauth_provider.client_id.clone(),
-            oauth_provider.client_secret.unwrap_or_default(),
+            client_secret,
             format!("https://{}", host),
             Some(auth_ep.clone()),
             Some(token_ep.clone()),
@@ -81,15 +84,14 @@ fn setup_credential_via_oauth(
         // Default GitHub-style endpoints
         OAuth2Session::new(
             oauth_provider.client_id.clone(),
-            oauth_provider.client_secret.unwrap_or_default(),
+            client_secret,
             format!("https://{}", host),
         )
     };
 
     let server = session.create_server();
     let pkce = PKCESecret::new();
-
-    let auth_url = session.auth_url(&server, &pkce);
+    let auth_url = session.auth_url(&server, &pkce, &scopes);
     eprintln!("  URL: {}", auth_url);
 
     // Try to open browser
