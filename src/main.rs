@@ -56,6 +56,21 @@ enum Commands {
 }
 
 fn main() {
+    // Initialize configuration and migrate old profiles on startup
+    if let Err(e) = config::migrate_old_profiles() {
+        eprintln!("Warning: Failed to migrate old profiles: {}", e);
+    }
+
+    // Load and initialize OAuth configuration
+    match config::load_config() {
+        Ok(_) => {
+            // Configuration loaded or created successfully
+        }
+        Err(e) => {
+            eprintln!("Warning: Failed to load OAuth configuration: {}", e);
+        }
+    }
+
     let cli = Cli::parse();
 
     match cli.command {

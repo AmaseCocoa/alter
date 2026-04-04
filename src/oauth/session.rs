@@ -25,6 +25,7 @@ pub struct OAuth2TokenResponse {
 }
 
 pub struct OAuth2TemporaryServer {
+    #[allow(dead_code)]
     pub port: u16,
     pub redirect_uri: String,
 }
@@ -34,6 +35,8 @@ pub struct OAuth2Session {
     client_secret: String,
     server: OnceLock<Server>,
     host: String,
+    auth_endpoint: Option<String>,
+    token_endpoint: Option<String>,
 }
 
 impl OAuth2Session {
@@ -43,6 +46,26 @@ impl OAuth2Session {
             client_secret,
             server: OnceLock::new(),
             host,
+            auth_endpoint: None,
+            token_endpoint: None,
+        }
+    }
+
+    /// Create a new session with custom OAuth endpoints
+    pub fn with_endpoints(
+        client_id: String,
+        client_secret: String,
+        host: String,
+        auth_endpoint: Option<String>,
+        token_endpoint: Option<String>,
+    ) -> Self {
+        Self {
+            client_id,
+            client_secret,
+            server: OnceLock::new(),
+            host,
+            auth_endpoint,
+            token_endpoint,
         }
     }
 
@@ -80,9 +103,16 @@ impl OAuth2Session {
     }
 
     pub fn auth_url(&self, server: &OAuth2TemporaryServer, pkce: &PKCESecret) -> String {
+        // Use custom auth endpoint if provided, otherwise default to GitHub style
+        let auth_endpoint = if let Some(ref endpoint) = self.auth_endpoint {
+            endpoint.clone()
+        } else {
+            format!("{}/login/oauth/authorize", self.host)
+        };
+
         format!(
-            "{}/login/oauth/authorize?client_id={}&redirect_uri={}&scope=repo&code_challenge={}&code_challenge_method=S256",
-            self.host,
+            "{}?client_id={}&redirect_uri={}&scope=repo&code_challenge={}&code_challenge_method=S256",
+            auth_endpoint,
             self.client_id,
             urlencoding::encode(&server.redirect_uri),
             pkce.code_challenge
@@ -106,8 +136,15 @@ impl OAuth2Session {
         let mut header = HeaderMap::new();
         header.insert(ACCEPT, HeaderValue::from_static("application/json"));
 
+        // Use custom token endpoint if provided, otherwise default to GitHub style
+        let token_endpoint = if let Some(ref endpoint) = self.token_endpoint {
+            endpoint.clone()
+        } else {
+            format!("{}/login/oauth/access_token", self.host)
+        };
+
         let res = client
-            .post(format!("{}/login/oauth/access_token", self.host))
+            .post(token_endpoint)
             .headers(header)
             .json(&body)
             .send();

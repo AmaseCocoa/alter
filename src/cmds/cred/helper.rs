@@ -4,7 +4,7 @@ use std::io::{self, BufRead};
 use crate::config;
 use crate::git;
 use crate::keyring;
-use crate::oauth::{pkce::PKCESecret, profiles::get_profile_for_host, session::OAuth2Session};
+use crate::oauth::{pkce::PKCESecret, session::OAuth2Session};
 
 fn read_credential_input() -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
     let stdin = io::stdin();
@@ -49,11 +49,14 @@ fn setup_credential_via_oauth(
     profile_id: &str,
     host: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    // Get OAuth2 profile for host
-    let oauth_profile = match get_profile_for_host(host) {
-        Some(p) => p,
-        None => {
-            return Err(format!("No OAuth2 profile available for host: {}", host).into());
+    // Get OAuth provider for this host from config
+    let oauth_provider = match config::get_provider_for_host(host) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return Err(format!("No OAuth provider configured for host: {}", host).into());
+        }
+        Err(e) => {
+            return Err(format!("Failed to load provider configuration: {}", e).into());
         }
     };
 
@@ -62,11 +65,26 @@ fn setup_credential_via_oauth(
         host
     );
 
-    let mut session = OAuth2Session::new(
-        oauth_profile.client_id.to_string(),
-        oauth_profile.client_secret.unwrap_or("").to_string(),
-        format!("https://{}", host),
-    );
+    let mut session = if let (Some(auth_ep), Some(token_ep)) = (
+        &oauth_provider.auth_endpoint,
+        &oauth_provider.token_endpoint,
+    ) {
+        // Custom OAuth endpoints
+        OAuth2Session::with_endpoints(
+            oauth_provider.client_id.clone(),
+            oauth_provider.client_secret.unwrap_or_default(),
+            format!("https://{}", host),
+            Some(auth_ep.clone()),
+            Some(token_ep.clone()),
+        )
+    } else {
+        // Default GitHub-style endpoints
+        OAuth2Session::new(
+            oauth_provider.client_id.clone(),
+            oauth_provider.client_secret.unwrap_or_default(),
+            format!("https://{}", host),
+        )
+    };
 
     let server = session.create_server();
     let pkce = PKCESecret::new();
@@ -93,6 +111,11 @@ fn setup_credential_via_oauth(
 }
 
 pub fn helper_get() {
+    // Migrate old profiles if needed
+    if let Err(e) = config::migrate_old_profiles() {
+        eprintln!("Warning: Failed to migrate old profiles: {}", e);
+    }
+
     // Read input from stdin (protocol, host, etc.)
     let input = match read_credential_input() {
         Ok(i) => i,

@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use crate::config;
 use crate::keyring;
-use crate::oauth::{pkce::PKCESecret, profiles::get_profile_for_host, session::OAuth2Session};
+use crate::oauth::{pkce::PKCESecret, session::OAuth2Session};
 
 pub fn setup_credentials(profile: String, host: Option<String>) {
     // Get profile info
@@ -35,12 +35,16 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
         return;
     }
 
-    // Get OAuth2 profile for host
-    let oauth_profile = match get_profile_for_host(&target_host) {
-        Some(p) => p,
-        None => {
-            eprintln!("No OAuth2 profile available for host: {}", target_host);
-            eprintln!("Supported hosts: github.com");
+    // Get OAuth provider for host from config
+    let oauth_provider = match config::get_provider_for_host(&target_host) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            eprintln!("No OAuth provider available for host: {}", target_host);
+            eprintln!("Please configure a provider in ~/.alter/config.toml");
+            return;
+        }
+        Err(e) => {
+            eprintln!("Failed to load provider configuration: {}", e);
             return;
         }
     };
@@ -48,10 +52,23 @@ pub fn setup_credentials(profile: String, host: Option<String>) {
     // Start OAuth2 flow
     println!("Starting OAuth2 authentication for {}...", target_host);
 
-    let mut session = OAuth2Session::new(
-        oauth_profile.client_id.to_string(),
-        oauth_profile.client_secret.unwrap_or("").to_string(),
-        format!("https://{}", target_host),
+    // Get the appropriate OAuth endpoints for this provider
+    let (auth_endpoint, token_endpoint) = config::get_auth_token_endpoints(&oauth_provider);
+
+    let mut session = OAuth2Session::with_endpoints(
+        oauth_provider.client_id.clone(),
+        oauth_provider.client_secret.unwrap_or_default(),
+        format!("https://{}", oauth_provider.host),
+        if auth_endpoint.is_empty() {
+            None
+        } else {
+            Some(auth_endpoint)
+        },
+        if token_endpoint.is_empty() {
+            None
+        } else {
+            Some(token_endpoint)
+        },
     );
 
     let server = session.create_server();
