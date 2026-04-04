@@ -39,7 +39,15 @@ jobs:
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare binary for upload
+      - name: Prepare binary for upload (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          mv alter.exe ${{ matrix.artifact_name }}
+        shell: pwsh
+      
+      - name: Prepare binary for upload (UNIX)
+        if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
           mv alter ${{ matrix.artifact_name }}
