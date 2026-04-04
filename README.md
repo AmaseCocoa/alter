@@ -50,12 +50,18 @@ cargo install alter
 
 ```bash
 paru -S alter
+
+# if use pre-built binary
+paru -S alter-bin
 ```
 
 Or with `yay`:
 
 ```bash
 yay -S alter
+
+# if use pre-built binary
+yay -S alter-bin
 ```
 
 ### From Source
