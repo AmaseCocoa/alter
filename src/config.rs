@@ -430,46 +430,6 @@ pub fn get_profile_from_slug(slug: String) -> Result<ProfileInfo, io::Error> {
     }
 }
 
-use crate::git;
-
-pub fn get_current_profile() -> Result<Option<ProfileInfo>, Box<dyn std::error::Error>> {
-    let local_config = git::GitConfig::load(true);
-    let mut current_id = None;
-
-    if let Ok(config) = local_config {
-        if let Ok(section) = config.file.section("credential", None) {
-            if let Some(namespace) = section.value("namespace") {
-                current_id = Some(namespace.to_string());
-            }
-        }
-    }
-
-    if current_id.is_none() {
-        if let Ok(config) = git::GitConfig::load(false) {
-            if let Ok(section) = config.file.section("credential", None) {
-                if let Some(namespace) = section.value("namespace") {
-                    current_id = Some(namespace.to_string());
-                }
-            }
-        }
-    }
-
-    if let Some(id_str) = current_id {
-        if id_str.is_empty() {
-            return Ok(None);
-        }
-
-        let profiles = list_profiles()?;
-        for profile in profiles {
-            if profile.id.to_string() == id_str {
-                return Ok(Some(profile));
-            }
-        }
-    }
-
-    Ok(None)
-}
-
 pub fn add_host_to_credentials(slug: String, host: String) -> Result<(), io::Error> {
     let mut config_path = get_config_dir()?;
     config_path.push(format!("{}.toml", slug));

@@ -29,8 +29,10 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    #[command(about = "Show all avaliable profile and current profile.")]
+    #[command(about = "Show all available profiles.")]
     List {},
+    #[command(about = "Show the current profile and login status.")]
+    Current {},
     #[command(about = "Change the current profile to the selected one.")]
     Use {
         #[arg(
@@ -75,6 +77,7 @@ fn main() {
 
     match cli.command {
         Commands::List {} => cmds::list::list_profiles(),
+        Commands::Current {} => cmds::list::show_current_profile(),
         Commands::Use { slug, local } => {
             cmds::use_profile::use_profile(slug, local);
         }
