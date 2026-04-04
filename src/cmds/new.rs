@@ -42,6 +42,7 @@ pub fn new_profile() {
             email: email,
             signing_key: signing_key_option,
         },
+        credentials: None
     };
     
     let mut conf_dir = config::get_config_dir().unwrap();
