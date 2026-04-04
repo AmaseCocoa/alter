@@ -7,6 +7,13 @@ description = 'One-liner to switch Git identity and credentials.'
 license = "MIT"
 repository = "https://github.com/AmaseCocoa/alter"
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
 [dependencies]
 clap = { version = "4.5.53", features = ["derive"] }
 dialoguer = "0.12.0"
