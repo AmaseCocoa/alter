@@ -3,19 +3,18 @@ use gix_object::bstr::BString;
 
 use crate::{config, git};
 
-fn set_section_value(
-    section: &mut SectionMut,
-    key_str: &str,
-    value_str: &str,
-) {
+fn set_section_value(section: &mut SectionMut, key_str: &str, value_str: &str) {
     let key = match ValueName::try_from(key_str.to_string()) {
         Ok(k) => k,
         Err(e) => {
-            eprintln!("Internal error: Failed to create ValueName '{}': {}", key_str, e);
+            eprintln!(
+                "Internal error: Failed to create ValueName '{}': {}",
+                key_str, e
+            );
             return;
         }
     };
-    
+
     let value: BString = value_str.into();
     section.set(key.into(), value.as_ref());
 }
@@ -29,7 +28,16 @@ pub fn use_profile(profile: Option<String>, local: bool) {
                         if let Ok(mut credential_section) =
                             gitconfig.file.section_mut_or_create_new("credential", None)
                         {
-                            set_section_value(&mut credential_section, "namespace", &profile.id.to_string());
+                            set_section_value(
+                                &mut credential_section,
+                                "namespace",
+                                &profile.id.to_string(),
+                            );
+                            set_section_value(
+                                &mut credential_section,
+                                "helper",
+                                "!alter cred helper",
+                            );
                         } else {
                             eprintln!("Failed to create credential section");
                         }
@@ -56,12 +64,12 @@ pub fn use_profile(profile: Option<String>, local: bool) {
                     gitconfig.file.section_mut_or_create_new("credential", None)
                 {
                     set_section_value(&mut credential_section, "namespace", "");
+                    set_section_value(&mut credential_section, "helper", "");
                 } else {
                     eprintln!("Failed to create credential section");
                 }
 
-                if let Ok(mut user_section) =
-                    gitconfig.file.section_mut_or_create_new("user", None)
+                if let Ok(mut user_section) = gitconfig.file.section_mut_or_create_new("user", None)
                 {
                     set_section_value(&mut user_section, "email", "");
                     set_section_value(&mut user_section, "name", "");

@@ -1,6 +1,7 @@
-mod config;
 mod cmds;
+mod config;
 mod git;
+mod keyring;
 mod oauth;
 
 use clap::{Parser, Subcommand};
@@ -14,7 +15,12 @@ use clap::{Parser, Subcommand};
     arg_required_else_help = true,
 )]
 struct Cli {
-    #[arg(short, long, global = true, help = "Enable verbose output for detailed execution information.")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        help = "Enable verbose output for detailed execution information."
+    )]
     verbose: bool,
 
     #[command(subcommand)]
@@ -23,70 +29,48 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    #[command(
-        about = "Show all avaliable profile and current profile.", 
-    )]
+    #[command(about = "Show all avaliable profile and current profile.")]
     List {},
-    #[command(
-        about = "Change the current profile to the selected one.", 
-    )]
+    #[command(about = "Change the current profile to the selected one.")]
     Use {
-        #[arg(help = "The slug (filename) of the profile you want to use. If left blank, it resets the current profile.")]
+        #[arg(
+            help = "The slug (filename) of the profile you want to use. If left blank, it resets the current profile."
+        )]
         slug: Option<String>,
         #[clap(long, short, action)]
         #[arg(help = "If set, this change will apply to the local repository.")]
         local: bool,
     },
-    #[command(
-        about = "Create profile.", 
-    )]
+    #[command(about = "Create profile.")]
     New {},
-        #[command(
-            about = "Delete profile.", 
-        )]
-        Delete {
-            #[arg(help = "The slug (filename) of the profile you want to delete.")]
-            slug: String,
-        },
-        #[command(
-            about = "Manage credentials for profiles.", 
-        )]
-        Credm {
-            #[command(subcommand)]
-            command: CredmCommands,
-        },
-    }
-    
-    #[derive(Subcommand, Debug)]
-    pub enum CredmCommands {
-        Get {},
-        Store {},
-        Erase {},
-    }
-    
-    fn main() {
-        let cli = Cli::parse();
-    
-        match cli.command {
-            Commands::List {} => {
-                cmds::list::list_profiles()
-            }
-            Commands::Use { slug, local } => {
-                cmds::use_profile::use_profile(slug, local);
-            },
-            Commands::New {} => {
-                cmds::new::new_profile();
-            },
-            Commands::Delete { slug } => {
-                cmds::delete::delete_profile(slug);
-            }
-            Commands::Credm { command } => {
-                match command {
-                    CredmCommands::Get {} => {},
-                    CredmCommands::Store {} => {},
-                    CredmCommands::Erase {} => {},
-                }
-            }
+    #[command(about = "Delete profile.")]
+    Delete {
+        #[arg(help = "The slug (filename) of the profile you want to delete.")]
+        slug: String,
+    },
+    #[command(about = "Manage credentials for profiles.")]
+    Cred {
+        #[command(subcommand)]
+        command: cmds::cred::CredCommands,
+    },
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::List {} => cmds::list::list_profiles(),
+        Commands::Use { slug, local } => {
+            cmds::use_profile::use_profile(slug, local);
+        }
+        Commands::New {} => {
+            cmds::new::new_profile();
+        }
+        Commands::Delete { slug } => {
+            cmds::delete::delete_profile(slug);
+        }
+        Commands::Cred { command } => {
+            cmds::cred::handle_cred_command(command);
         }
     }
-    
+}

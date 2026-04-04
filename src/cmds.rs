@@ -1,5 +1,5 @@
-pub mod list;
-pub mod use_profile;
-pub mod new;
+pub mod cred;
 pub mod delete;
-pub mod credm;
+pub mod list;
+pub mod new;
+pub mod use_profile;
