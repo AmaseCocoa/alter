@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{fs, io};
 
 use dirs;
@@ -78,7 +78,14 @@ pub struct OAuthProvider {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AlterConfig {
+    #[serde(default)]
     pub oauth_providers: HashMap<String, OAuthProvider>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PartialAlterConfig {
+    #[serde(default)]
+    oauth_providers: HashMap<String, OAuthProvider>,
 }
 
 // ============================================================================
@@ -124,11 +131,28 @@ fn get_config_file() -> Result<PathBuf, io::Error> {
 // OAuth Provider configuration
 // ============================================================================
 
-pub fn generate_default_config() -> AlterConfig {
+/// Get builtin/default OAuth providers (not from user config)
+fn builtin_providers() -> HashMap<String, OAuthProvider> {
     let mut providers = HashMap::new();
 
+    // Codeberg
     providers.insert(
-        "github".to_string(),
+        "codeberg.org".to_string(),
+        OAuthProvider {
+            provider_type: ProviderType::Gitea,
+            host: "codeberg.org".to_string(),
+            client_id: "3a051795-3b22-4f98-85be-e0279c7c09c8".to_string(),
+            client_secret: Some(
+                "gto_dikrbgzem4nndlnidmhwzora6txa4p7zfpe47d7lyx7horehx6lq".to_string(),
+            ),
+            auth_endpoint: None,
+            token_endpoint: None,
+        },
+    );
+
+    // GitHub SaaS
+    providers.insert(
+        "github.com".to_string(),
         OAuthProvider {
             provider_type: ProviderType::GitHub,
             host: "github.com".to_string(),
@@ -139,8 +163,32 @@ pub fn generate_default_config() -> AlterConfig {
         },
     );
 
+    // GitLab SaaS
+    providers.insert(
+        "gitlab.com".to_string(),
+        OAuthProvider {
+            provider_type: ProviderType::GitLab,
+            host: "gitlab.com".to_string(),
+            client_id: "942221830f6b1a7290ffc9c07de2e09e5326cbe75b2d4aa3b3192ba7092a9e61"
+                .to_string(),
+            client_secret: Some(
+                "gloas-f449fa99794bf92f06e9179afc415b48bb44e3e7f7bc168080854af9acc632cf"
+                    .to_string(),
+            ),
+            auth_endpoint: None,
+            token_endpoint: None,
+        },
+    );
+
+    providers
+}
+
+/// Generate default config with builtin providers as the initial baseline.
+/// User configuration loaded from `~/.alter/config.toml` is merged on top,
+/// so user-defined entries override these defaults.
+pub fn generate_default_config() -> AlterConfig {
     AlterConfig {
-        oauth_providers: providers,
+        oauth_providers: builtin_providers(),
     }
 }
 
@@ -152,16 +200,27 @@ pub fn load_config() -> Result<AlterConfig, Box<dyn std::error::Error>> {
         let mut content = String::new();
         file.read_to_string(&mut content)?;
 
-        match toml::from_str(&content) {
-            Ok(config) => Ok(config),
+        let user_config = match toml::from_str::<PartialAlterConfig>(&content) {
+            Ok(config) => config,
             Err(e) => {
-                eprintln!("Warning: Failed to parse config.toml: {}", e);
-                eprintln!("Using default configuration");
-                Ok(generate_default_config())
+                if content.trim().is_empty() {
+                    PartialAlterConfig {
+                        oauth_providers: HashMap::new(),
+                    }
+                } else {
+                    eprintln!("Warning: Failed to parse config.toml: {}", e);
+                    eprintln!("Using built-in configuration");
+                    PartialAlterConfig {
+                        oauth_providers: HashMap::new(),
+                    }
+                }
             }
-        }
+        };
+
+        let mut merged = generate_default_config();
+        merged.oauth_providers.extend(user_config.oauth_providers);
+        Ok(merged)
     } else {
-        // Generate default config and save it
         let default_config = generate_default_config();
         save_default_config(&default_config)?;
         Ok(default_config)
@@ -172,51 +231,9 @@ fn save_default_config(_config: &AlterConfig) -> Result<(), Box<dyn std::error::
     let config_path = get_config_file()?;
 
     let toml_content = r#"# Alter OAuth Configuration
-# This file configures OAuth providers for Git authentication
-
-# GitHub SaaS
-[oauth_providers.github]
-type = "github"
-host = "github.com"
-client_id = "Ov23liM4hSM09bDhwmOG"
-client_secret = "eccb1988f224f0ef54bd78f6b4691f9e854f3449"
-
-# GitHub Enterprise (uncomment and customize):
-# [oauth_providers.ghe]
-# type = "github"
-# host = "git.company.com"
-# client_id = "YOUR_GHE_CLIENT_ID"
-# client_secret = "YOUR_GHE_CLIENT_SECRET"
-
-# GitLab SaaS (uncomment and customize):
-# [oauth_providers.gitlab]
-# type = "gitlab"
-# host = "gitlab.com"
-# client_id = "YOUR_GITLAB_CLIENT_ID"
-# client_secret = "YOUR_GITLAB_CLIENT_SECRET"
-
-# GitLab Self-hosted (uncomment and customize):
-# [oauth_providers.gitlab_internal]
-# type = "gitlab"
-# host = "git.internal.com"
-# client_id = "YOUR_GITLAB_ID"
-# client_secret = "YOUR_GITLAB_SECRET"
-
-# Gitea (uncomment and customize):
-# [oauth_providers.gitea]
-# type = "gitea"
-# host = "gitea.example.com"
-# client_id = "YOUR_GITEA_CLIENT_ID"
-# client_secret = "YOUR_GITEA_CLIENT_SECRET"
-
-# Generic OAuth server (uncomment and customize):
-# [oauth_providers.custom]
-# type = "generic"
-# host = "custom.server.com"
-# auth_endpoint = "https://custom.server.com/oauth/authorize"
-# token_endpoint = "https://custom.server.com/oauth/token"
-# client_id = "YOUR_CUSTOM_CLIENT_ID"
-# client_secret = "YOUR_CUSTOM_CLIENT_SECRET"
+# This file only contains user overrides.
+# Built-in providers like github.com are available automatically.
+# Add providers here only when you want to override defaults or add custom hosts.
 "#;
 
     fs::write(&config_path, toml_content)?;
@@ -231,16 +248,13 @@ pub fn migrate_old_profiles() -> Result<(), Box<dyn std::error::Error>> {
     let alter_dir = home_dir.join(".alter");
     let new_dir = alter_dir.join("profiles");
 
-    // Check BEFORE creating any directories
     if old_dir.exists() && !new_dir.exists() {
         eprintln!("Migrating profiles from ~/.git-profiles to ~/.alter/profiles...");
 
-        // Create .alter directory if it doesn't exist
         if !alter_dir.exists() {
             fs::create_dir_all(&alter_dir)?;
         }
 
-        // Rename the old profiles directory to the new location
         fs::rename(&old_dir, &new_dir)?;
         eprintln!("✓ Migration complete");
     }
@@ -251,14 +265,17 @@ pub fn migrate_old_profiles() -> Result<(), Box<dyn std::error::Error>> {
 pub fn get_provider_for_host(
     host: &str,
 ) -> Result<Option<OAuthProvider>, Box<dyn std::error::Error>> {
-    let config = load_config()?;
+    let user_config = load_config()?;
 
-    // Try to find a provider that matches this host exactly
-    Ok(config
+    if let Some(provider) = user_config
         .oauth_providers
         .values()
         .find(|p| p.host == host)
-        .cloned())
+    {
+        return Ok(Some(provider.clone()));
+    }
+
+    Ok(None)
 }
 
 fn endpoint_for_provider_type(provider_type: &ProviderType) -> (String, String) {
@@ -275,10 +292,7 @@ fn endpoint_for_provider_type(provider_type: &ProviderType) -> (String, String) 
             "https://{host}/login/oauth/authorize".to_string(),
             "https://{host}/login/oauth/access_token".to_string(),
         ),
-        ProviderType::Generic => {
-            // Generic provider must use auth_endpoint and token_endpoint from config
-            ("".to_string(), "".to_string())
-        }
+        ProviderType::Generic => ("".to_string(), "".to_string()),
     }
 }
 
@@ -288,15 +302,12 @@ fn endpoint_for_provider_type(provider_type: &ProviderType) -> (String, String) 
 
 /// Get the actual OAuth endpoint URLs for a provider
 pub fn get_auth_token_endpoints(provider: &OAuthProvider) -> (String, String) {
-    // If explicit endpoints are provided, use them
     if let (Some(auth), Some(token)) = (&provider.auth_endpoint, &provider.token_endpoint) {
         return (auth.clone(), token.clone());
     }
 
-    // Otherwise, generate from provider type and host
     let (auth_template, token_template) = endpoint_for_provider_type(&provider.provider_type);
 
-    // Replace {host} placeholder with actual host
     let auth_endpoint = auth_template.replace("{host}", &provider.host);
     let token_endpoint = token_template.replace("{host}", &provider.host);
 
@@ -376,7 +387,6 @@ pub fn get_profile_from_slug(slug: String) -> Result<ProfileInfo, io::Error> {
 
 use crate::git;
 
-#[allow(dead_code)]
 pub fn get_current_profile() -> Result<Option<ProfileInfo>, Box<dyn std::error::Error>> {
     let local_config = git::GitConfig::load(true);
     let mut current_id = None;
@@ -491,7 +501,7 @@ pub fn get_credential_hosts(slug: String) -> Result<Vec<String>, io::Error> {
     }
 }
 
-fn read_profile_config(path: &Path) -> Result<AlterProfileConfig, io::Error> {
+fn read_profile_config(path: &PathBuf) -> Result<AlterProfileConfig, io::Error> {
     let mut file = fs::File::open(path)?;
     let mut content = String::new();
     file.read_to_string(&mut content)?;
