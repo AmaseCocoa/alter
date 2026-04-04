@@ -31,13 +31,26 @@ fn write_credential_output(output: &HashMap<String, String>) {
 }
 
 fn get_current_profile_id() -> Result<Option<String>, Box<dyn std::error::Error>> {
-    let git_config = git::GitConfig::load(true).or_else(|_| git::GitConfig::load(false))?;
+    // Prefer repository-local config if available and contains a non-empty namespace.
+    if let Ok(local_cfg) = git::GitConfig::load(true) {
+        if let Ok(section) = local_cfg.file.section("credential", None) {
+            if let Some(namespace) = section.value("namespace") {
+                let id_str = namespace.to_string();
+                if !id_str.is_empty() {
+                    return Ok(Some(id_str));
+                }
+            }
+        }
+    }
 
-    if let Ok(section) = git_config.file.section("credential", None) {
-        if let Some(namespace) = section.value("namespace") {
-            let id_str = namespace.to_string();
-            if !id_str.is_empty() {
-                return Ok(Some(id_str));
+    // Fallback to the global/user gitconfig if local did not yield a namespace.
+    if let Ok(global_cfg) = git::GitConfig::load(false) {
+        if let Ok(section) = global_cfg.file.section("credential", None) {
+            if let Some(namespace) = section.value("namespace") {
+                let id_str = namespace.to_string();
+                if !id_str.is_empty() {
+                    return Ok(Some(id_str));
+                }
             }
         }
     }
