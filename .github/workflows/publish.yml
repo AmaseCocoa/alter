@@ -37,7 +37,7 @@ jobs:
         run: rustup --version
 
       - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} --no-default-features --features tls-rustls
 
       - name: Prepare binary for upload (Windows)
         if: runner.os == 'Windows'
