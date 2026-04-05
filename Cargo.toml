@@ -37,4 +37,4 @@ open = "5.0"
 [features]
 default = ["tls-native"]
 tls-native = ["reqwest/native-tls"]
-tls-rustls = ["reqwest/rustls-tls"]
+tls-rustls = ["reqwest/default-tls"]
